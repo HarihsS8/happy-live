@@ -8,6 +8,7 @@ A simple video and audio live streaming application built with Node.js, Express,
 - One-to-many broadcasting (one broadcaster, multiple viewers)
 - WebRTC-based peer-to-peer connections
 - Simple web interface
+- **Location-based streaming** - Restricts streaming to users within 50km radius for local community broadcasting
 
 ## Prerequisites
 
@@ -38,15 +39,21 @@ A simple video and audio live streaming application built with Node.js, Express,
 
    **Note**: Since this uses self-signed certificates, your browser will show a security warning. Click "Advanced" and "Proceed to localhost (unsafe)" to continue. This is normal for local development.
 
-3. To start broadcasting:
+3. **Get Your Location**:
+   - Click "Get My Location" to enable geolocation
+   - Allow the browser to access your location
+   - Your coordinates will be displayed
+
+4. To start broadcasting:
    - Click "Start Broadcasting"
    - Allow camera and microphone access
    - Your video will appear in the local video element
 
-4. To join as a viewer:
+5. To join as a viewer:
    - Click "Join Stream"
    - Allow camera and microphone access (required for WebRTC)
-   - You will see the broadcaster's stream in the remote video element
+   - You will see the broadcaster's stream if you're within 50km
+   - If you're too far, you'll receive a location rejection message
 
 ## How it Works
 
@@ -54,6 +61,11 @@ A simple video and audio live streaming application built with Node.js, Express,
 - Socket.IO handles signaling between peers
 - One user acts as the broadcaster, others as viewers
 - STUN server is used for NAT traversal
+- **Location-based streaming**: Uses the Geolocation API to get user coordinates
+  - Each broadcaster and viewer must share their location
+  - Viewers within 50km of the broadcaster are allowed to connect
+  - Viewers outside the radius are rejected automatically
+  - Distances are calculated using the Haversine formula
 
 ## Troubleshooting
 

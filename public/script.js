@@ -3,9 +3,13 @@ let localStream;
 let peerConnections = new Map(); // For broadcaster: multiple connections
 let peerConnection; // For viewer: single connection
 let isBroadcaster = false;
+let userLocation = null; // {latitude, longitude}
+const MAX_LOCATION_DISTANCE = 50; // kilometers
 
 const localVideo = document.getElementById('localVideo');
 const remoteVideo = document.getElementById('remoteVideo');
+const getLocationBtn = document.getElementById('getLocation');
+const locationStatus = document.getElementById('locationStatus');
 const startBroadcastBtn = document.getElementById('startBroadcast');
 const stopBroadcastBtn = document.getElementById('stopBroadcast');
 const joinStreamBtn = document.getElementById('joinStream');
@@ -16,16 +20,62 @@ const configuration = {
   ]
 };
 
+// Get user's location
+getLocationBtn.addEventListener('click', () => {
+  if (navigator.geolocation) {
+    getLocationBtn.disabled = true;
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        userLocation = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        };
+        const distance = 'Location detected';
+        locationStatus.textContent = `Location: ${userLocation.latitude.toFixed(4)}, ${userLocation.longitude.toFixed(4)}`;
+        locationStatus.className = 'location-ok';
+        startBroadcastBtn.disabled = false;
+        joinStreamBtn.disabled = false;
+        getLocationBtn.textContent = 'Location Updated';
+      },
+      (error) => {
+        locationStatus.textContent = `Location Error: ${error.message}`;
+        locationStatus.className = 'location-error';
+        getLocationBtn.disabled = false;
+      }
+    );
+  } else {
+    locationStatus.textContent = 'Geolocation not supported by this browser';
+    locationStatus.className = 'location-error';
+  }
+});
+
+// Calculate distance between two coordinates (Haversine formula)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 // Start broadcasting
 startBroadcastBtn.addEventListener('click', async () => {
+  if (!userLocation) {
+    alert('Please get your location first');
+    return;
+  }
   try {
     localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     localVideo.srcObject = localStream;
-    socket.emit('broadcaster');
+    socket.emit('broadcaster', userLocation);
     isBroadcaster = true;
     startBroadcastBtn.disabled = true;
     stopBroadcastBtn.disabled = false;
     joinStreamBtn.disabled = true;
+    getLocationBtn.disabled = true;
   } catch (error) {
     console.error('Error accessing media devices:', error);
     alert('Could not access camera and microphone. Please check permissions.');
@@ -49,13 +99,19 @@ stopBroadcastBtn.addEventListener('click', () => {
   startBroadcastBtn.disabled = false;
   stopBroadcastBtn.disabled = true;
   joinStreamBtn.disabled = false;
+  getLocationBtn.disabled = false;
 });
 
 // Join stream as viewer
 joinStreamBtn.addEventListener('click', () => {
-  socket.emit('viewer');
+  if (!userLocation) {
+    alert('Please get your location first');
+    return;
+  }
+  socket.emit('viewer', userLocation);
   joinStreamBtn.disabled = true;
   startBroadcastBtn.disabled = true;
+  getLocationBtn.disabled = true;
 });
 
 // Socket event handlers
@@ -63,8 +119,22 @@ socket.on('broadcaster', () => {
   console.log('Broadcaster connected');
 });
 
-socket.on('viewer', (id) => {
-  if (isBroadcaster) {
+socket.on('viewer', (id, viewerLocation) => {
+  if (isBroadcaster && userLocation && viewerLocation) {
+    const distance = calculateDistance(
+      userLocation.latitude,
+      userLocation.longitude,
+      viewerLocation.latitude,
+      viewerLocation.longitude
+    );
+    
+    if (distance > MAX_LOCATION_DISTANCE) {
+      console.log(`Viewer ${id} is ${distance.toFixed(2)}km away (max: ${MAX_LOCATION_DISTANCE}km)`);
+      socket.emit('location-rejected', id);
+      return;
+    }
+    
+    console.log(`Viewer ${id} is ${distance.toFixed(2)}km away - accepted`);
     const pc = createPeerConnection(id);
     peerConnections.set(id, pc);
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
@@ -129,6 +199,13 @@ socket.on('viewer-disconnected', (id) => {
       peerConnections.delete(id);
     }
   }
+});
+
+socket.on('location-rejected', () => {
+  alert('You are too far from the broadcaster. Streaming is limited to ' + MAX_LOCATION_DISTANCE + 'km radius.');
+  joinStreamBtn.disabled = false;
+  startBroadcastBtn.disabled = false;
+  getLocationBtn.disabled = false;
 });
 
 function createPeerConnection(id) {

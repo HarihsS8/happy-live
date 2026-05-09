@@ -15,23 +15,25 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from public directory
 app.use(express.static('public'));
 
-// Store connected clients
+// Store connected clients with their locations
 let broadcaster = null;
-const viewers = new Set();
+let broadcasterLocation = null;
+const viewers = new Map(); // id -> location
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  socket.on('broadcaster', () => {
+  socket.on('broadcaster', (location) => {
     broadcaster = socket.id;
+    broadcasterLocation = location;
     socket.broadcast.emit('broadcaster');
-    console.log('Broadcaster set:', socket.id);
+    console.log('Broadcaster set:', socket.id, 'at location:', location);
   });
 
-  socket.on('viewer', () => {
-    viewers.add(socket.id);
-    socket.to(broadcaster).emit('viewer', socket.id);
-    console.log('Viewer connected:', socket.id);
+  socket.on('viewer', (location) => {
+    viewers.set(socket.id, location);
+    socket.to(broadcaster).emit('viewer', socket.id, location);
+    console.log('Viewer connected:', socket.id, 'at location:', location);
   });
 
   socket.on('offer', (id, message) => {
@@ -46,10 +48,16 @@ io.on('connection', (socket) => {
     socket.to(id).emit('candidate', socket.id, message);
   });
 
+  socket.on('location-rejected', (id) => {
+    socket.to(id).emit('location-rejected');
+    viewers.delete(id);
+  });
+
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
     if (socket.id === broadcaster) {
       broadcaster = null;
+      broadcasterLocation = null;
       viewers.clear();
       io.emit('broadcaster-disconnected');
     } else {

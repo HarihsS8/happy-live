@@ -22,17 +22,34 @@
       font-size: 16px;
       cursor: pointer;
     }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     #controls {
       margin-top: 20px;
+    }
+    #locationStatus {
+      font-size: 14px;
+      color: #666;
+      margin: 10px 0;
+    }
+    .location-ok {
+      color: green;
+    }
+    .location-error {
+      color: red;
     }
   </style>
 </head>
 <body>
   <h1>Happy Live Streaming</h1>
   <div id="controls">
-    <button id="startBroadcast">Start Broadcasting</button>
-    <button id="stopBroadcast">Stop Broadcasting</button>
-    <button id="joinStream">Join Stream</button>
+    <button id="getLocation">Get My Location</button>
+    <p id="locationStatus">Location: Not detected</p>
+    <button id="startBroadcast" disabled>Start Broadcasting</button>
+    <button id="stopBroadcast" disabled>Stop Broadcasting</button>
+    <button id="joinStream" disabled>Join Stream</button>
   </div>
   <div id="videoContainer">
     <video id="localVideo" autoplay muted></video>
